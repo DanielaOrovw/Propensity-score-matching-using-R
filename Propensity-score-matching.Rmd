@@ -1,0 +1,243 @@
+---
+title: "Propensity score matching"
+author: "Daniela"
+date: "February 14, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r cars}
+setwd("C:/Users/Daniela Orovwiroro/Documents/Cust and social analytics")
+library(dplyr)
+HighNote_Data_Midterm= read.csv("HighNote Data Midterm.csv")
+HighNote_Data_Midterm_original=HighNote_Data_Midterm
+#1. Descriptive statistics
+summary(HighNote_Data_Midterm)
+```
+
+
+```{r pressure, echo=FALSE}
+#we sample the data based on adopters and non adopters
+non_adopter_samples= filter(HighNote_Data_Midterm, adopter== 0) 
+
+adopter_samples= filter(HighNote_Data_Midterm, adopter== 1) 
+
+#We calculate the descriptive statistics for the non adopter group
+summary(non_adopter_samples)
+#We calculate the descriptive statistics for the adopter group
+summary(adopter_samples)
+```
+```{r}
+#2. Data visualizationa
+#To create boxplots
+# install.packages("ggplot2")
+# load package and data
+options(scipen=999)  # turn-off scientific notation like 1e+48
+library(ggplot2)
+theme_set(theme_bw())  # pre-set the bw theme.
+
+# Scatterplot
+gg = ggplot(HighNote_Data_Midterm, aes(x=tenure , y=songsListened)) + 
+  geom_point(aes(col=adopter, size=age )) + 
+  geom_smooth(method="loess", se=F) + 
+  xlim(c(0, 115)) + 
+  ylim(c(0, 818000)) + 
+  labs(subtitle="Tenure Vs Song listened", 
+       y="Songs listened", 
+       x="Tenure", 
+       title="Scatterplot", 
+       caption = "Source: High note")
+
+plot(gg)
+
+# Density plot: load package and data
+options(scipen=999)  # turn-off scientific notation like 1e+48
+theme_set(theme_bw())  # pre-set the bw theme.
+
+# Density plot
+ggplot(HighNote_Data_Midterm, aes(tenure)) + geom_density(aes(fill = factor(adopter)), size=2) + labs(title="Density plot") 
+# Scatterplot
+# load package and data
+theme_set(theme_bw())  # pre-set the bw theme.
+
+g = ggplot(HighNote_Data_Midterm, aes(age, shouts))
+
+g + geom_point() + 
+  geom_smooth(method="lm", se=F) +
+  labs(subtitle="Age vs Shouts", 
+       y="shouts", 
+       x="age", 
+       title="Scatterplot with overlapping points", 
+       caption="Source: Highnote")
+
+g = ggplot(HighNote_Data_Midterm, aes(age, playlists))
+
+```
+```{r}
+
+
+# Scatterplot
+g + geom_point() + 
+  geom_smooth(method="lm", se=F) +
+  labs(subtitle="Age vs playlists", 
+       y="playlistss", 
+       x="age", 
+       title="Scatterplot with overlapping points", 
+       caption="Source: Highnote")
+
+# Scatterplot
+theme_set(theme_bw())  # pre-set the bw theme.
+g = ggplot(HighNote_Data_Midterm, aes(male, subscriber_friend_cnt))
+g + geom_count(col="pink", show.legend=F) +
+  labs(subtitle="Male vs subscriber_friend_cnt", 
+       y="subscriber_friend_cnt", 
+       x="Age",
+       title="Counts Plot")
+
+theme_set(theme_bw())
+# Ordered bar chart: Draw plot
+ggplot(HighNote_Data_Midterm, aes(x=age, y=subscriber_friend_cnt)) + 
+  geom_bar(stat="identity", width=.5, fill="purple") + 
+  labs(title="Ordered Bar Chart", 
+       subtitle="Age vs subscriber_friend_cnt", 
+       caption="source: highnote") + 
+  theme(axis.text.x = element_text(angle=65, vjust=0.6))
+
+```
+```{r}
+#To create boxplots
+# Convert the variable adopter from a numeric to a factor variable
+HighNote_Data_Midterm$adopternew = as.factor(HighNote_Data_Midterm$adopter)
+HighNote_Data_Midterm$males= as.factor(HighNote_Data_Midterm$male)
+# Change box plot line colors by groups
+p=ggplot(HighNote_Data_Midterm, aes(x=adopternew, y=subscriber_friend_cnt, color=adopternew)) +
+  geom_boxplot()
+p
+
+# Change box plot colors by groups
+ggplot(HighNote_Data_Midterm, aes(x=adopternew, y=subscriber_friend_cnt, fill=males)) +
+  geom_boxplot()
+# Change the position
+p=ggplot(HighNote_Data_Midterm, aes(x=adopternew, y=subscriber_friend_cnt, fill=males)) +
+  geom_boxplot(position=position_dodge(1))
+p
+HighNote_Data_Midterm$adopternew = NULL
+HighNote_Data_Midterm$males= NULL
+
+```
+
+```{r}
+#Report the correlations among the above variables.
+# Load data
+str(HighNote_Data_Midterm)
+library(corrplot)
+correlation= cor(HighNote_Data_Midterm[c(2:16)])
+correlation
+corrplot(correlation, method="circle")
+corrplot(correlation, method="number")
+```
+```{r}
+#3. Propensity Score Matching (PSM)
+library(MatchIt)
+Highnote=HighNote_Data_Midterm
+Highnote= mutate(Highnote,subscriber_friend_cnt>=1)
+names(Highnote)[17]="Treatment_group"
+Highnote$Treatment_group[Highnote$Treatment_group=="True"]=1
+
+with(Highnote,t.test(Treatment_group~adopter))
+
+Highnote_cov=c("Treatment_group")
+Highnote %>% group_by(Treatment_group)%>%
+  select(one_of(Highnote_cov))%>%
+  summarise_all(funs(mean(.,na.rm = T)))
+
+with(Highnote,t.test(Treatment_group~adopter))
+
+#Now let's prepare a Logistic Regression model to estimate the propensity scores.
+pscores.model= glm(Treatment_group ~ age + male + friend_cnt + avg_friend_age + avg_friend_male +friend_country_cnt
+                   +songsListened+lovedTracks+posts+playlists+shouts+tenure+good_country, family = "binomial", data = Highnote)
+summary(pscores.model)
+
+# Using this model, we can now calculate the propensity score for each student
+Propensity_scores = data.frame(propensity_score=predict(pscores.model,type = "response"),
+                               Treatment=pscores.model$model$Treatment_group)
+
+# Using this model, we can now calculate the propensity score 
+Highnote$PScores=pscores.model$fitted.values
+hist(Highnote$PScores[Highnote$subscriber_friend_cnt==1],main = "PScores of Response = 1")
+hist(Highnote$PScores[Highnote$subscriber_friend_cnt==0],main = "PScores of Response = 0")
+Highnote1=Highnote
+
+Highnote$PScores=NULL
+#Nearest Neighbour Matching is an algorithm that matches individuals with controls (it could be two or more controls per treated unit) based on a distance.
+match1 = matchit(Treatment_group ~ age + male + friend_cnt + avg_friend_age + avg_friend_male +friend_country_cnt
+                 +songsListened+lovedTracks+posts+playlists+shouts+tenure+good_country, method="nearest",data=Highnote)
+match1.data = match.data(match1)
+summary(match1.data)
+
+plot(match1, type="jitter")
+plot(match1, type="hist")
+
+
+#the difference in mean via t.test
+match1.data%>%group_by(Treatment_group)%>%
+  select(one_of(Highnote_cov))%>%
+  summarise_all(funs(mean))
+
+
+dim(match1.data)
+
+# The final dataset contains a variable called distance, which is the propensity score.
+
+
+
+# Estimating treatment effects
+
+# Estimating the treatment effect is simple once we have 
+# a matched sample that we are happy with. We can use a t-test:
+with(match1.data,t.test(Treatment_group~adopter))
+```
+```{r}
+#4. Regression Analyses and odd ratio
+summary(HighNote_Data_Midterm_original)
+logit = glm(HighNote_Data_Midterm_original$adopter~ HighNote_Data_Midterm_original$age+HighNote_Data_Midterm_original$male+HighNote_Data_Midterm_original$friend_cnt
+            +HighNote_Data_Midterm_original$avg_friend_age+HighNote_Data_Midterm_original$friend_country_cnt + HighNote_Data_Midterm_original$subscriber_friend_cnt
+            + HighNote_Data_Midterm_original$songsListened + HighNote_Data_Midterm_original$lovedTracks + HighNote_Data_Midterm_original$good_country, 
+            data = HighNote_Data_Midterm_original, family = "binomial")
+summary(logit)
+## CIs using profiled log-likelihood
+confint(logit)
+
+## CIs using standard errors
+confint.default(logit)
+
+## odds ratios only
+exp(coef(logit))
+
+## odds ratios and 95% CI
+exp(cbind(OR = coef(logit), confint(logit)))
+# For select independent variables
+mylogit = glm(HighNote_Data_Midterm_original$adopter ~ HighNote_Data_Midterm_original$subscriber_friend_cnt 
+              + HighNote_Data_Midterm_original$playlists + HighNote_Data_Midterm_original$songsListened
+              + HighNote_Data_Midterm_original$lovedTracks+HighNote_Data_Midterm_original$posts
+              +HighNote_Data_Midterm_original$shouts, data = HighNote_Data_Midterm_original, family = "binomial")
+summary(mylogit)
+
+## CIs using profiled log-likelihood
+confint(mylogit)
+
+## CIs using standard errors
+confint.default(mylogit)
+
+## odds ratios only
+exp(coef(mylogit))
+
+## odds ratios and 95% CI
+exp(cbind(OR = coef(mylogit), confint(mylogit)))
+```
+
+
